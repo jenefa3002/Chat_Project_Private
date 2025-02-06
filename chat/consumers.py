@@ -15,12 +15,12 @@ class PrivateChatConsumer(AsyncWebsocketConsumer):
         try:
             self.sender_username = self.scope['url_route']['kwargs']['sender_username']
             self.recipient_username = self.scope['url_route']['kwargs']['recipient_username']
-            self.room_name = f"{self.sender_username}_{self.recipient_username}"
+            self.room_name = f"chat_{min(self.sender_username, self.recipient_username)}_{max(self.sender_username, self.recipient_username)}"
             self.room_group_name = f"chat_{self.room_name}"
-
             await self.channel_layer.group_add(self.room_group_name, self.channel_name)
             await self.accept()
             logger.info(f"WebSocket connected to room: {self.room_group_name}")
+            logger.info(f"Connected to channel : {self.channel_name}")
         except Exception as e:
             logger.error(f"WebSocket connection error: {str(e)}")
             await self.close()
@@ -34,11 +34,9 @@ class PrivateChatConsumer(AsyncWebsocketConsumer):
             text_data_json = json.loads(text_data)
             message = text_data_json.get('message', None)
             file_url = text_data_json.get('file_url', None)
-
             if message is None:
                 await self.send(text_data=json.dumps({'error': 'No message provided'}))
                 return
-
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
@@ -57,15 +55,23 @@ class PrivateChatConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({'error': 'Invalid JSON'}))
 
     async def chat_message(self, event):
-        message = event['message']
-        sender = event['sender']
-        file_url = event.get('file_url', None)
-
         await self.send(text_data=json.dumps({
-            'message': message,
-            'sender': sender,
-            'file_url': file_url
+            'message': event['message'],
+            'sender': event['sender'],
+            'recipient': event['recipient'],
+            'file_url': event['file_url']
         }))
+
+    @sync_to_async
+    def save_message(self, sender_username, recipient_username, content, file_url):
+        sender_user = User.objects.get(username=sender_username)
+        recipient_user = User.objects.get(username=recipient_username)
+        message = PrivateMessage.objects.create(
+            sender=sender_user,
+            recipient=recipient_user,
+            content=content,
+        )
+        return message
 
     @sync_to_async
     def delete_message(self, message_id):
@@ -76,12 +82,20 @@ class PrivateChatConsumer(AsyncWebsocketConsumer):
         except PrivateMessage.DoesNotExist:
             logger.error(f"Message with ID {message_id} not found.")
 
-    @sync_to_async
-    def save_message(self, sender_username, recipient_username, content, file_url):
-        sender_user = User.objects.get(username=sender_username)
-        recipient_user = User.objects.get(username=recipient_username)
-        message = PrivateMessage.objects.create(sender=sender_user, recipient=recipient_user, content=content, file=file_url)
-        logger.info(f"Message saved: {message}")
+    async def user_online(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'user_status',
+            'username': event['username'],
+            'status': 'online',
+        }))
+
+    async def user_offline(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'user_status',
+            'username': event['username'],
+            'status': 'offline',
+        }))
+
 
     async def send_notification(self, recipient_username, message):
         recipient = await sync_to_async(User.objects.get)(username=recipient_username)
@@ -161,6 +175,7 @@ class UserStatusConsumer(AsyncWebsocketConsumer):
     async def disconnect(self, close_code):
         await self.update_user_status(False)
         await self.send_status_update(self.user.username, False)
+        logger.info("Websocket for ")
 
     async def update_user_status(self, status):
         await database_sync_to_async(self.update_status)(self.user, status)

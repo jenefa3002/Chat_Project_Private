@@ -141,3 +141,18 @@ def fetch_new_messages(request, username):
 @login_required
 def screen_share(request):
     return render(request, 'chat.html')
+
+from django.http import JsonResponse
+from django.contrib.auth.models import User
+from .models import PrivateMessage
+
+@login_required
+def fetch_unread_count(request, username):
+    user = request.user
+    recipient = User.objects.get(username=username)
+    unread_count = PrivateMessage.objects.filter(
+        recipient=recipient,
+        is_read=True,
+        deleted=True
+    ).count()
+    return JsonResponse({'unread_count': unread_count})

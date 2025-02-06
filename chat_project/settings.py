@@ -54,7 +54,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
-INTERNAL_IPS = ['127.0.0.1']
+INTERNAL_IPS = ['*']
 ROOT_URLCONF = 'chat_project.urls'
 MEDIA_ROOT = '/assets/media'
 MEDIA_URL = '/media/'

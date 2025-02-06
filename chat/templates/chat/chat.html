@@ -399,10 +399,17 @@ if (peerConnection) {
             sendMessage();
         }
     });
-
+    chatSocket.onmessage = event => {
+        console.log('Received WebSocket message:', event.data);
+        const data = JSON.parse(event.data);
+        renderMessage(data);
+        };
     function sendMessage() {
         const messageInput = document.getElementById('message-input');
         const message = messageInput.value.trim();
+        if(!message){
+        return
+        }
         console.log('Sending message:', message);
         chatSocket.send(JSON.stringify({
         'message': message,
@@ -410,37 +417,29 @@ if (peerConnection) {
         }));
         messageInput.value = '';
     }
-
-    chatSocket.onmessage = event => {
-        console.log('Received WebSocket message:', event.data);
-        const data = JSON.parse(event.data);
-        renderMessage(data);
-        };
-        function renderMessage(data) {
-            const chatMessages = document.getElementById('chat-messages');
-            const newMessage = `
-                <div class="message-container ${data.sender === "{{ user.username }}" ? 'me' : 'other'}" id="message-${data.id}" onclick="handleTap(${data.id})">
-                    ${data.sender !== "{{ user.username }}" ? '<div class="avatar"></div>' : ''}
-                    <div class="message-bubble">
-                        <div class="username">${data.sender}</div>
-                        <div class="message-content">${data.message}</div>
-                        <div class="message-timestamp">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-                    </div>
-                    <div class="options" id="options-${data.id}">
-                        <button onclick="deleteMessage(${data.id})">Delete</button>
-                        <button onclick="copyMessage('${data.message}')">Copy</button>
-                    </div>
-                </div>`;
-                chatMessages.insertAdjacentHTML('beforeend', newMessage);
-                chatMessages.scrollTop = chatMessages.scrollHeight;
-
+    function renderMessage(data) {
+        const chatMessages = document.getElementById('chat-messages');
+        const newMessage = `
+            <div class="message-container ${data.sender === "{{ user.username }}" ? 'me' : 'other'}" id="message-${data.id}" onclick="handleTap(${data.id})">
+            ${data.sender !== "{{ user.username }}" ? '<div class="avatar"></div>' : ''}
+            <div class="message-bubble">
+            <div class="username">${data.sender}</div>
+            <div class="message-content">${data.message}</div>
+            <div class="message-timestamp">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+            </div>
+            <div class="options" id="options-${data.id}">
+            <button onclick="deleteMessage(${data.id})">Delete</button>
+            <button onclick="copyMessage('${data.message}')">Copy</button>
+            </div>
+        </div>`;
+        chatMessages.insertAdjacentHTML('beforeend', newMessage);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
         }
     chatSocket.onopen = () => {
         console.log('WebSocket connection established');
     };
     function handleTap(messageId) {
     console.log('Tapped message with ID:', messageId);
-    location.reload(true);
     const options = document.getElementById(`options-${messageId}`);
         if (options) {
         const currentDisplay = window.getComputedStyle(options).display;
@@ -461,19 +460,6 @@ if (peerConnection) {
                 console.error('Failed to copy message: ', err);
             });
     }
-    const notificationSocket = new WebSocket('ws://' + window.location.host + '/ws/notifications/');
-
-    notificationSocket.onmessage = event => {
-        const data = JSON.parse(event.data);
-        if (data.type === 'notification') {
-            alert(`New message from ${data.sender}: ${data.message}`);
-        }
-    };
-
-    notificationSocket.onclose = event => {
-        console.error('Notification socket closed unexpectedly', event);
-    };
-
     function getCookie(name) {
         let cookieValue = null;
         if (document.cookie && document.cookie !== '') {
