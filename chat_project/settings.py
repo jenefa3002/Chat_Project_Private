@@ -26,7 +26,7 @@ SECRET_KEY = 'django-insecure-_p*1gctig#p%*e91$0q&qwt=+2c$@_jtq&cun077-fe)nhc9d+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -58,6 +58,7 @@ INTERNAL_IPS = ['*']
 ROOT_URLCONF = 'chat_project.urls'
 MEDIA_ROOT = '/assets/media'
 MEDIA_URL = '/media/'
+CSRF_COOKIE_HTTPONLY = False
 
 TEMPLATES = [
     {

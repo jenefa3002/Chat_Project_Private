@@ -16,7 +16,7 @@
         }
         .chat-header {
             padding: 15px;
-            background-color: #4caf50;
+            background-color: #800080;
             color: white;
             text-align: center;
             font-size: 1.2rem;
@@ -49,53 +49,34 @@
 </head>
 <body>
 <div class="container">
-    <header class="chat-header">Users</header>
+    <header class="chat-header">{{ user.username }}</header>
     <ul class="user-list" id="userList">
         {% for user in users %}
             <li id="user-{{ user.username }}" onclick="startChat('{{ user.username }}')">
                 {{ user.username }}
-                <span class="user-status" data-username="{{ user.username }}">
-                    {% if user.status.is_online %}
-                        <span style="color: green;">Online</span>
-                    {% else %}
-                        <span style="color: red;"></span>
-                    {% endif %}
-                </span>
-                <span id="unread-count-{{ user.username }}" class="unread-count" style="color: red"></span>
+                 {% if request.user.is_superuser %}
+                <span id="status-{{ user.id }}">
+                    {% if user.is_online %} 🟢 {% else %} 🔴 {% endif %}
+                 </span>
+                {% endif %}
             </li>
         {% endfor %}
     </ul>
 </div>
 
 <script>
-    const wsProtocol = window.location.protocol === "https:" ? "wss://" : "ws://";
-    const notificationSocket = new WebSocket(wsProtocol + window.location.host + '/ws/notifications/');
-    notificationSocket.onmessage = event => {
-    const data = JSON.parse(event.data);
-    if (data.type === 'user_status') {
-        const userElement = document.getElementById(`user-${data.username}`);
+    var socket = new WebSocket(
+        (window.location.protocol === "https:" ? "wss://" : "ws://") +
+        window.location.host + "/ws/online_status/"
+    );
+
+    socket.onmessage = function(event) {
+        var data = JSON.parse(event.data);
+        var userElement = document.getElementById("status-" + data.user_id);
         if (userElement) {
-            const statusElement = userElement.querySelector('.user-status');
-            if (statusElement) {
-                if (data.status === 'online' || data.status === Is_Online) {
-                    statusElement.textContent = "Online";
-                    statusElement.style.color = "green";
-                } else {
-                    statusElement.textContent = "Offline";
-                    statusElement.style.color = "red";
-                }
-            }
+            userElement.innerHTML = data.is_online ? "🟢 Online" : "🔴 Offline";
         }
-    }
-    if (data.type === 'unread_count') {
-        const unreadCountElement = document.getElementById(`unread-count-${data.sender}`);
-        if (unreadCountElement) {
-            unreadCountElement.textContent = `(${data.unread_count})`;
-        }
-    }
-};
-
-
+    };
     function startChat(username) {
         window.location.href = '/chat/' + username + '/';
     }

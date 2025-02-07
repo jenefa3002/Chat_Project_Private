@@ -33,10 +33,16 @@ class PrivateChatConsumer(AsyncWebsocketConsumer):
         try:
             text_data_json = json.loads(text_data)
             message = text_data_json.get('message', None)
-            file_url = text_data_json.get('file_url', None)
+            file_url = text_data_json.get('file_url')
+
+            if not message and not file_url:
+                await self.send(text_data=json.dumps({'error': 'No message provided'}))
+                return
+
             if message is None:
                 await self.send(text_data=json.dumps({'error': 'No message provided'}))
                 return
+
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
@@ -55,12 +61,7 @@ class PrivateChatConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({'error': 'Invalid JSON'}))
 
     async def chat_message(self, event):
-        await self.send(text_data=json.dumps({
-            'message': event['message'],
-            'sender': event['sender'],
-            'recipient': event['recipient'],
-            'file_url': event['file_url']
-        }))
+        await self.send(text_data=json.dumps(event))
 
     @sync_to_async
     def save_message(self, sender_username, recipient_username, content, file_url):
@@ -70,17 +71,9 @@ class PrivateChatConsumer(AsyncWebsocketConsumer):
             sender=sender_user,
             recipient=recipient_user,
             content=content,
+            file=file_url
         )
         return message
-
-    @sync_to_async
-    def delete_message(self, message_id):
-        try:
-            message = PrivateMessage.objects.get(id=message_id)
-            message.delete()
-            logger.info(f"Message with ID {message_id} deleted.")
-        except PrivateMessage.DoesNotExist:
-            logger.error(f"Message with ID {message_id} not found.")
 
     async def user_online(self, event):
         await self.send(text_data=json.dumps({
@@ -161,32 +154,45 @@ class ScreenShareConsumer(AsyncWebsocketConsumer):
         message = event['message']
         await self.send(text_data=json.dumps(message))
 
-class UserStatusConsumer(AsyncWebsocketConsumer):
+
+class OnlineStatusConsumer(AsyncWebsocketConsumer):
+
     async def connect(self):
+
         self.user = self.scope["user"]
         if self.user.is_authenticated:
-            await self.update_user_status(True)
+            await self.set_online_status(self.user, True)
+            await self.channel_layer.group_add("online_users", self.channel_name)
             await self.accept()
-            print("WebSocket accepted")
-            await self.send_status_update(self.user.username, True)
-        else:
-            await self.close()
+            await self.broadcast_user_status(self.user, True)
 
     async def disconnect(self, close_code):
-        await self.update_user_status(False)
-        await self.send_status_update(self.user.username, False)
-        logger.info("Websocket for ")
+        if self.user.is_authenticated:
+            await self.set_online_status(self.user, False)
+            await self.channel_layer.group_discard("online_users", self.channel_name)
+            await self.broadcast_user_status(self.user, False)
 
-    async def update_user_status(self, status):
-        await database_sync_to_async(self.update_status)(self.user, status)
+    async def receive(self, text_data):
+        data = json.loads(text_data)
+        message = data.get("message", "")
+        await self.send(text_data=json.dumps({"message": message}))
 
-    def update_status(self, user, status):
-        user_status, created = UserStatus.objects.get_or_create(user=user)
+    async def broadcast_user_status(self, user, is_online):
+        await self.channel_layer.group_send(
+            "online_users",
+            {
+                "type": "user_status",
+                "user_id": user.id,
+                "username": user.username,
+                "is_online": is_online,
+            }
+        )
+
+    async def user_status(self, event):
+        await self.send(text_data=json.dumps(event))
+
+    @sync_to_async
+    def set_online_status(self, user, status):
+        user_status, _ = UserStatus.objects.get_or_create(user=user)
         user_status.is_online = status
         user_status.save()
-
-    async def send_status_update(self, username, is_online):
-        await self.send(text_data=json.dumps({
-            'username': username,
-            'is_online': is_online,
-        }))
